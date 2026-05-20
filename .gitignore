@@ -1,0 +1,51 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environment
+venv/   
+env/
+.env
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Data files (local)
+data/
+*.parquet
+*.csv
+*.json
+!requirements.txt
+
+# Logs
+logs/
+*.log
+*.tmp
+
+# Spark checkpoints
+spark-warehouse/
+derby.log
+metastore_db/
+
+# Airflow
+airflow.cfg
+airflow.db
+webserver_config.py
+
+# Kafka data
+/kafka/data/
+/zookeeper/data/
+
+# Postgres data
+/postgres/data/
+
+# Grafana data
+/grafana/data/
+
+# OS specific files
+.DS_Store
+Thumbs.db
