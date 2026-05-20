@@ -6,21 +6,13 @@ x-airflow-common: &airflow-common
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
     AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__WEBSERVER__SECRET_KEY: "my_secret_key"
-    _PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-apache-spark pyspark"
   volumes:
-    - ./batch/airflow/dags:/opt/airflow/dags
-    - ./batch/airflow/logs:/opt/airflow/logs
-    - ./batch/airflow/plugins:/opt/airflow/plugins
-    - ./batch/spark_jobs:/opt/airflow/batch/spark_jobs
-    - ${USERPROFILE}/.aws:/home/airflow/.aws:ro
+    - ../../batch/airflow/dags:/opt/airflow/dags
+    - ../../batch/airflow/logs:/opt/airflow/logs
+    - ../../batch/airflow/plugins:/opt/airflow/plugins
+    - ../../batch/spark_jobs:/opt/airflow/batch/spark_jobs
   user: "${AIRFLOW_UID:-50000}:0"
-  depends_on:
-    postgres:
-      condition: service_healthy
-    redis:
-      condition: service_healthy
 
 services:
   postgres:
@@ -53,7 +45,7 @@ services:
 
   spark-master:
     image: apache/spark-py:latest
-    container_name: spark-master
+    container_name: spark_master
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
       --host spark-master
@@ -65,7 +57,7 @@ services:
 
   spark-worker:
     image: apache/spark-py:latest
-    container_name: spark-worker
+    container_name: spark_worker
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
       spark://spark-master:7077
@@ -82,15 +74,20 @@ services:
     container_name: airflow_init
     command: >
       bash -c "
-      airflow db migrate &&
-      airflow users create
+      python -m airflow db migrate &&
+      (python -m airflow users create
       --username airflow
       --password airflow
       --firstname Airflow
       --lastname Admin
       --role Admin
-      --email airflow@example.com || true
+      --email airflow@example.com || true)
       "
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: "no"
 
   airflow-webserver:
