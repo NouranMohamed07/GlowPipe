@@ -7,11 +7,14 @@ x-airflow-common: &airflow-common
     AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__WEBSERVER__SECRET_KEY: "my_secret_key"
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
   volumes:
-    - ../../batch/airflow/dags:/opt/airflow/dags
-    - ../../batch/airflow/logs:/opt/airflow/logs
-    - ../../batch/airflow/plugins:/opt/airflow/plugins
-    - ../../batch/spark_jobs:/opt/airflow/batch/spark_jobs
+    - ./batch/airflow/dags:/opt/airflow/dags
+    - ./batch/airflow/logs:/opt/airflow/logs
+    - ./batch/airflow/plugins:/opt/airflow/plugins
+    - ./batch/spark_jobs:/opt/airflow/batch/spark_jobs
   user: "${AIRFLOW_UID:-50000}:0"
 
 services:
@@ -46,6 +49,10 @@ services:
   spark-master:
     image: apache/spark-py:latest
     container_name: spark_master
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
       --host spark-master
@@ -58,12 +65,16 @@ services:
   spark-worker:
     image: apache/spark-py:latest
     container_name: spark_worker
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
-      spark://spark-master:7077
-      --cores 1
-      --memory 1G
-      --webui-port 8081
+        spark://spark-master:7077
+        --cores 1
+        --memory 1G
+        --webui-port 8081
     depends_on:
       - spark-master
     ports:
