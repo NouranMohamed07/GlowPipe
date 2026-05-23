@@ -1,5 +1,7 @@
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.7.1-python3.9
+  build:
+    context: .
+    dockerfile: Dockerfile
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -11,14 +13,15 @@ x-airflow-common: &airflow-common
     AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
     AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
-    # if you have additional Python dependencies for Airflow, add them here:
-    _PIP_ADDITIONAL_REQUIREMENTS: "pyspark apache-airflow-providers-apache-spark boto3"
+    _AIRFLOW_DB_MIGRATE: "true"
+    _AIRFLOW_WWW_USER_CREATE: "true"
+    _AIRFLOW_WWW_USER_USERNAME: "airflow"
+    _AIRFLOW_WWW_USER_PASSWORD: "airflow"
   volumes:
     - ../batch/airflow/dags:/opt/airflow/dags
     - ../batch/airflow/logs:/opt/airflow/logs
     - ../batch/airflow/plugins:/opt/airflow/plugins
     - ../batch/spark_jobs:/opt/airflow/batch/spark_jobs
-    - ../deployment/scripts:/scripts  # if you have custom scripts for initialization or other purposes
   user: "${AIRFLOW_UID:-50000}:0"
   networks:
     - glowpipe_network
@@ -61,76 +64,56 @@ services:
     networks:
       - glowpipe_network
 
-
   spark-master:
     image: apache/spark-py:latest
     container_name: spark_master
     user: root
     environment:
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
       --host spark-master
       --port 7077
       --webui-port 8080
     ports:
-      - "7077:7077"
-      - "8083:8080"  # Spark Master Web UI
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - "8083:8080"
     networks:
       - glowpipe_network
 
   spark-worker:
     image: apache/spark-py:latest
     container_name: spark_worker
-    user: root 
+    user: root
     environment:
       SPARK_WORKER_DIR: /tmp/spark-work
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
-        spark://spark-master:7077
-        --cores 1
-        --memory 1G
-        --webui-port 8081
+      spark://spark-master:7077
+      --cores 1
+      --memory 1G
+      --webui-port 8081
     depends_on:
-      spark-master:
-        condition: service_healthy   
+      - spark-master
     ports:
       - "8081:8081"
     networks:
       - glowpipe_network
-    
 
   airflow-init:
     <<: *airflow-common
     container_name: airflow_init
-    entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        airflow db init
-        airflow users create \
-          --username airflow \
-          --password airflow \
-          --firstname Airflow \
-          --lastname Admin \
-          --role Admin \
-          --email airflow@example.com || true
+    command: version
+    restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: "no"
 
   airflow-webserver:
     <<: *airflow-common
@@ -142,7 +125,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
       spark-master:
-        condition: service_healthy
+        condition: service_started
 
   airflow-scheduler:
     <<: *airflow-common
@@ -152,7 +135,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
       spark-master:
-        condition: service_healthy
+        condition: service_started
 
   airflow-worker:
     <<: *airflow-common
@@ -162,7 +145,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
       spark-master:
-        condition: service_healthy
+        condition: service_started
 
 volumes:
   postgres_data:
