@@ -65,6 +65,7 @@ services:
   spark-master:
     image: apache/spark-py:latest
     container_name: spark_master
+    user: root
     environment:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -88,7 +89,9 @@ services:
   spark-worker:
     image: apache/spark-py:latest
     container_name: spark_worker
+    user: root 
     environment:
+      SPARK_WORKER_DIR: /tmp/spark-work
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
