@@ -24,7 +24,7 @@ with DAG(
             docker exec spark_master \
             /opt/spark/bin/spark-submit \
             --master spark://spark-master:7077 \
-            /opt/airflow/batch/spark_jobs/bronze.py
+            /opt/airflow/batch/spark_jobs/raw_to_bronze.py
         """,
     )
 
@@ -34,7 +34,7 @@ with DAG(
             docker exec spark_master \
             /opt/spark/bin/spark-submit \
             --master spark://spark-master:7077 \
-            /opt/airflow/batch/spark_jobs/silver.py
+            /opt/airflow/batch/spark_jobs/bronze_to_silver.py
         """,
     )
 
@@ -44,7 +44,7 @@ with DAG(
             docker exec spark_master \
             /opt/spark/bin/spark-submit \
             --master spark://spark-master:7077 \
-            /opt/airflow/batch/spark_jobs/gold.py
+            /opt/airflow/batch/spark_jobs/silver_to_gold.py
         """,
     )
 
