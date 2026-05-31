@@ -1,0 +1,492 @@
+apiVersion: 1
+
+providers:
+  - name: GlowPipe Dashboards
+    orgId: 1
+    folder: GlowPipe
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+
+dashboards:
+  - title: GlowPipe Live Streaming
+    uid: glowpipe-streaming
+    timezone: browser
+    refresh: 10s
+    schemaVersion: 37
+    time:
+      from: now-30m
+      to: now
+
+    panels:
+
+      # ══════════════════════════════════════════════════════
+      # ROW 1 — Headline stats (4 stat panels)
+      # ══════════════════════════════════════════════════════
+
+      - id: 1
+        title: Events last 30 min
+        type: stat
+        gridPos: { x: 0,  y: 0, w: 6, h: 4 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          colorMode: background
+          graphMode: area
+        fieldConfig:
+          defaults:
+            color: { mode: thresholds }
+            thresholds:
+              mode: absolute
+              steps: [{ color: blue, value: 0 }]
+        targets:
+          - rawSql: |
+              SELECT count(*) AS value
+              FROM live_events
+              WHERE event_timestamp >= NOW() - INTERVAL '30 minutes'
+            format: table
+            refId: A
+
+      - id: 2
+        title: Purchases last 30 min
+        type: stat
+        gridPos: { x: 6,  y: 0, w: 6, h: 4 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          colorMode: background
+          graphMode: area
+        fieldConfig:
+          defaults:
+            color: { mode: thresholds }
+            thresholds:
+              mode: absolute
+              steps:
+                - { color: green, value: 0 }
+                - { color: teal,  value: 10 }
+        targets:
+          - rawSql: |
+              SELECT count(*) AS value
+              FROM live_events
+              WHERE event_type = 'purchase'
+                AND event_timestamp >= NOW() - INTERVAL '30 minutes'
+            format: table
+            refId: B
+
+      - id: 3
+        title: Unsafe products (last 30 min)
+        type: stat
+        gridPos: { x: 12, y: 0, w: 6, h: 4 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          colorMode: background
+          graphMode: none
+        fieldConfig:
+          defaults:
+            thresholds:
+              mode: absolute
+              steps:
+                - { color: green,  value: 0  }
+                - { color: orange, value: 5  }
+                - { color: red,    value: 20 }
+        targets:
+          - rawSql: |
+              SELECT count(*) AS value
+              FROM allergen_alerts
+              WHERE is_safe = false
+                AND alert_timestamp >= NOW() - INTERVAL '30 minutes'
+            format: table
+            refId: C
+
+      - id: 4
+        title: Active outbreaks
+        type: stat
+        gridPos: { x: 18, y: 0, w: 6, h: 4 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          colorMode: background
+          graphMode: none
+        fieldConfig:
+          defaults:
+            thresholds:
+              mode: absolute
+              steps:
+                - { color: green,  value: 0 }
+                - { color: red,    value: 1 }
+        targets:
+          - rawSql: |
+              SELECT count(*) AS value
+              FROM allergen_outbreaks
+              WHERE window_start >= NOW() - INTERVAL '10 minutes'
+            format: table
+            refId: D
+
+      # ══════════════════════════════════════════════════════
+      # ROW 2 — Q1: Trending products (table + time-series)
+      # ══════════════════════════════════════════════════════
+
+      - id: 5
+        title: "Q1 — Top trending products right now"
+        type: table
+        gridPos: { x: 0,  y: 4, w: 14, h: 9 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          footer: { show: false }
+          sortBy: [{ displayName: trend_score, desc: true }]
+        fieldConfig:
+          overrides:
+            - matcher: { id: byName, options: trend_score }
+              properties:
+                - id: custom.displayMode
+                  value: color-background
+                - id: thresholds
+                  value:
+                    mode: absolute
+                    steps:
+                      - { color: green,  value: 0   }
+                      - { color: yellow, value: 50  }
+                      - { color: red,    value: 100 }
+            - matcher: { id: byName, options: purchase_count }
+              properties:
+                - id: custom.displayMode
+                  value: color-background
+                - id: thresholds
+                  value:
+                    mode: absolute
+                    steps:
+                      - { color: green, value: 0 }
+                      - { color: teal,  value: 5 }
+        targets:
+          - rawSql: |
+              SELECT
+                product_id,
+                skin_type,
+                category,
+                view_count,
+                cart_count,
+                purchase_count,
+                abandon_count,
+                COALESCE(avg_rating, 0)::numeric(3,2)  AS avg_rating,
+                trend_score
+              FROM trending_now
+              WHERE window_start >= NOW() - INTERVAL '10 minutes'
+              ORDER BY trend_score DESC
+              LIMIT 15
+            format: table
+            refId: E
+
+      - id: 6
+        title: "Q1 — Trend score over time (top 3 products)"
+        type: timeseries
+        gridPos: { x: 14, y: 4, w: 10, h: 9 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          tooltip: { mode: multi }
+          legend: { displayMode: list, placement: bottom }
+        fieldConfig:
+          defaults:
+            custom: { lineWidth: 2, fillOpacity: 10 }
+        targets:
+          - rawSql: |
+              SELECT
+                window_start AS time,
+                product_id,
+                trend_score
+              FROM trending_now
+              WHERE window_start BETWEEN $__timeFrom() AND $__timeTo()
+              ORDER BY time
+            format: time_series
+            refId: F
+
+      # ══════════════════════════════════════════════════════
+      # ROW 3 — Q2: Allergen outbreak detection
+      # ══════════════════════════════════════════════════════
+
+      - id: 7
+        title: "Q2 — Allergen outbreaks (3+ reports in 5 min)"
+        type: table
+        gridPos: { x: 0, y: 13, w: 12, h: 7 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          footer: { show: false }
+        fieldConfig:
+          overrides:
+            - matcher: { id: byName, options: outbreak_severity }
+              properties:
+                - id: custom.displayMode
+                  value: color-background
+                - id: mappings
+                  value:
+                    - type: value
+                      options:
+                        medium:   { color: yellow, index: 0 }
+                        high:     { color: orange, index: 1 }
+                        critical: { color: red,    index: 2 }
+        targets:
+          - rawSql: |
+              SELECT
+                window_start,
+                product_id,
+                skin_type,
+                unsafe_report_count,
+                avg_compat_score,
+                outbreak_severity
+              FROM allergen_outbreaks
+              WHERE window_start >= NOW() - INTERVAL '30 minutes'
+              ORDER BY unsafe_report_count DESC
+            format: table
+            refId: G
+
+      - id: 8
+        title: "Q2 — Allergens by skin type"
+        type: barchart
+        gridPos: { x: 12, y: 13, w: 12, h: 7 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          orientation: vertical
+          groupWidth: 0.7
+          legend: { displayMode: list, placement: bottom }
+        targets:
+          - rawSql: |
+              SELECT
+                skin_type,
+                count(*) FILTER (WHERE is_safe = false) AS unsafe,
+                count(*) FILTER (WHERE is_safe = true)  AS safe
+              FROM allergen_alerts
+              WHERE alert_timestamp BETWEEN $__timeFrom() AND $__timeTo()
+              GROUP BY skin_type
+              ORDER BY skin_type
+            format: table
+            refId: H
+
+      # ══════════════════════════════════════════════════════
+      # ROW 4 — Q3: Live session conversion funnel
+      # ══════════════════════════════════════════════════════
+
+      - id: 9
+        title: "Q3 — Live conversion funnel by skin type"
+        type: table
+        gridPos: { x: 0, y: 20, w: 14, h: 7 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          footer: { show: false }
+          sortBy: [{ displayName: purchase_rate, desc: true }]
+        fieldConfig:
+          overrides:
+            - matcher: { id: byName, options: abandon_rate }
+              properties:
+                - id: custom.displayMode
+                  value: color-background
+                - id: thresholds
+                  value:
+                    mode: absolute
+                    steps:
+                      - { color: green,  value: 0  }
+                      - { color: yellow, value: 30 }
+                      - { color: red,    value: 60 }
+            - matcher: { id: byName, options: purchase_rate }
+              properties:
+                - id: custom.displayMode
+                  value: color-background
+                - id: thresholds
+                  value:
+                    mode: absolute
+                    steps:
+                      - { color: red,    value: 0  }
+                      - { color: yellow, value: 20 }
+                      - { color: green,  value: 50 }
+        targets:
+          - rawSql: |
+              SELECT
+                skin_type,
+                category,
+                views,
+                cart_adds,
+                purchases,
+                abandons,
+                cart_rate     AS "cart_rate %",
+                purchase_rate AS "purchase_rate %",
+                abandon_rate  AS "abandon_rate %"
+              FROM session_funnel
+              WHERE window_start >= NOW() - INTERVAL '10 minutes'
+              ORDER BY abandon_rate DESC
+            format: table
+            refId: I
+
+      - id: 10
+        title: "Q3 — Purchase rate over time per skin type"
+        type: timeseries
+        gridPos: { x: 14, y: 20, w: 10, h: 7 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          tooltip: { mode: multi }
+          legend: { displayMode: list, placement: bottom }
+        fieldConfig:
+          defaults:
+            unit: percent
+            min: 0
+            max: 100
+            custom: { lineWidth: 2, fillOpacity: 8 }
+        targets:
+          - rawSql: |
+              SELECT
+                window_start AS time,
+                skin_type,
+                purchase_rate
+              FROM session_funnel
+              WHERE window_start BETWEEN $__timeFrom() AND $__timeTo()
+              ORDER BY time
+            format: time_series
+            refId: J
+
+      # ══════════════════════════════════════════════════════
+      # ROW 5 — Q4: Price abandonment signal
+      # ══════════════════════════════════════════════════════
+
+      - id: 11
+        title: "Q4 — Price pressure by skin type (% events over budget)"
+        type: bargauge
+        gridPos: { x: 0, y: 27, w: 12, h: 7 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          orientation: horizontal
+          reduceOptions:
+            calcs: [lastNotNull]
+          displayMode: gradient
+        fieldConfig:
+          defaults:
+            unit: percent
+            min: 0
+            max: 100
+            thresholds:
+              mode: absolute
+              steps:
+                - { color: green,  value: 0  }
+                - { color: yellow, value: 40 }
+                - { color: red,    value: 70 }
+        targets:
+          - rawSql: |
+              SELECT
+                skin_type,
+                AVG(price_pressure) AS price_pressure
+              FROM price_abandonment
+              WHERE window_start >= NOW() - INTERVAL '10 minutes'
+              GROUP BY skin_type
+              ORDER BY price_pressure DESC
+            format: table
+            refId: K
+
+      - id: 12
+        title: "Q4 — Avg abandon price vs avg purchase price"
+        type: timeseries
+        gridPos: { x: 12, y: 27, w: 12, h: 7 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          tooltip: { mode: multi }
+          legend: { displayMode: list, placement: bottom }
+        fieldConfig:
+          defaults:
+            unit: currencyGBP
+            custom: { lineWidth: 2 }
+        targets:
+          - rawSql: |
+              SELECT
+                window_start AS time,
+                avg_abandon_price,
+                avg_purchase_price
+              FROM price_abandonment
+              WHERE window_start BETWEEN $__timeFrom() AND $__timeTo()
+              ORDER BY time
+            format: time_series
+            refId: L
+
+      # ══════════════════════════════════════════════════════
+      # ROW 6 — Q5: Ingredient concern spikes
+      # ══════════════════════════════════════════════════════
+
+      - id: 13
+        title: "Q5 — Ingredient concern spikes (cross-product, last 30 min)"
+        type: table
+        gridPos: { x: 0, y: 34, w: 14, h: 7 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          footer: { show: false }
+          sortBy: [{ displayName: signal_count, desc: true }]
+        fieldConfig:
+          overrides:
+            - matcher: { id: byName, options: concern_level }
+              properties:
+                - id: custom.displayMode
+                  value: color-background
+                - id: mappings
+                  value:
+                    - type: value
+                      options:
+                        low:    { color: green,  index: 0 }
+                        medium: { color: yellow, index: 1 }
+                        high:   { color: red,    index: 2 }
+        targets:
+          - rawSql: |
+              SELECT
+                window_start,
+                ingredient_name,
+                concern_level,
+                signal_count,
+                total_affected_products
+              FROM ingredient_spikes
+              WHERE window_start >= NOW() - INTERVAL '30 minutes'
+              ORDER BY signal_count DESC
+            format: table
+            refId: M
+
+      - id: 14
+        title: "Q5 — Ingredient spike signals over time"
+        type: timeseries
+        gridPos: { x: 14, y: 34, w: 10, h: 7 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          tooltip: { mode: multi }
+          legend: { displayMode: list, placement: bottom }
+        fieldConfig:
+          defaults:
+            custom: { lineWidth: 2, fillOpacity: 10 }
+        targets:
+          - rawSql: |
+              SELECT
+                window_start AS time,
+                ingredient_name,
+                signal_count
+              FROM ingredient_spikes
+              WHERE window_start BETWEEN $__timeFrom() AND $__timeTo()
+              ORDER BY time
+            format: time_series
+            refId: "N"
+
+      # ══════════════════════════════════════════════════════
+      # ROW 7 — Events per minute (bottom overview)
+      # ══════════════════════════════════════════════════════
+
+      - id: 15
+        title: Events per minute (all types)
+        type: timeseries
+        gridPos: { x: 0, y: 41, w: 24, h: 7 }
+        datasource: { uid: glowpipe_pg }
+        options:
+          tooltip: { mode: multi }
+          legend: { displayMode: list, placement: bottom }
+        fieldConfig:
+          defaults:
+            custom: { lineWidth: 2, fillOpacity: 10 }
+        targets:
+          - rawSql: |
+              SELECT
+                date_trunc('minute', event_timestamp) AS time,
+                event_type,
+                count(*) AS events
+              FROM live_events
+              WHERE event_timestamp BETWEEN $__timeFrom() AND $__timeTo()
+              GROUP BY 1, 2
+              ORDER BY 1
+            format: time_series
+            refId: O
