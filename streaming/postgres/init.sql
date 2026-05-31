@@ -55,7 +55,7 @@ CREATE TABLE trending_now (
     avg_price           NUMERIC(10,2),
     trend_score         NUMERIC(10,2),
     ingested_at         TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
-    UNIQUE (window_start, product_id, skin_type)
+    
 );
 CREATE INDEX idx_tn_window  ON trending_now (window_start DESC);
 CREATE INDEX idx_tn_score   ON trending_now (trend_score DESC);
@@ -101,7 +101,7 @@ CREATE TABLE allergen_outbreaks (
     avg_allergen_count   NUMERIC(4,1),
     outbreak_severity    VARCHAR(16),     -- medium | high | critical
     ingested_at          TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
-    UNIQUE (window_start, product_id, skin_type)
+    
 );
 CREATE INDEX idx_ao_time     ON allergen_outbreaks (window_start DESC);
 CREATE INDEX idx_ao_severity ON allergen_outbreaks (outbreak_severity);
@@ -126,7 +126,7 @@ CREATE TABLE session_funnel (
     purchase_rate    NUMERIC(5,1), -- purchases / cart_adds × 100
     abandon_rate     NUMERIC(5,1), -- abandons / cart_adds × 100
     ingested_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    UNIQUE (window_start, skin_type, category)
+    
 );
 CREATE INDEX idx_sf_window ON session_funnel (window_start DESC);
 CREATE INDEX idx_sf_skin   ON session_funnel (skin_type);
@@ -149,7 +149,7 @@ CREATE TABLE price_abandonment (
     avg_purchase_price   NUMERIC(10,2),
     price_pressure       NUMERIC(5,1),  -- % of events where price > budget
     ingested_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
-    UNIQUE (window_start, skin_type, category)
+    
 );
 CREATE INDEX idx_pa_window   ON price_abandonment (window_start DESC);
 CREATE INDEX idx_pa_pressure ON price_abandonment (price_pressure DESC);
@@ -168,7 +168,7 @@ CREATE TABLE ingredient_spikes (
     signal_count            INTEGER       DEFAULT 0,
     total_affected_products INTEGER       DEFAULT 0,
     ingested_at             TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    UNIQUE (window_start, ingredient_name, concern_level)
+    
 );
 CREATE INDEX idx_is_window      ON ingredient_spikes (window_start DESC);
 CREATE INDEX idx_is_ingredient  ON ingredient_spikes (ingredient_name);
