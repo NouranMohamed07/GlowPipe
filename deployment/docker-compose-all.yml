@@ -81,6 +81,8 @@ services:
       - "8083:8080"
     networks:
       - glowpipe_network
+    volumes:
+      - ../batch/spark_jobs:/opt/spark/work-dir/batch/spark_jobs
 
   spark-worker:
     image: apache/spark-py:latest
@@ -103,6 +105,8 @@ services:
       - "8081:8081"
     networks:
       - glowpipe_network
+    volumes:
+      - ../batch/spark_jobs:/opt/spark/work-dir/batch/spark_jobs
 
   airflow-init:
     <<: *airflow-common
