@@ -259,7 +259,7 @@ services:
       - ../streaming/kafka:/app
     command: >
       sh -c "pip install kafka-python --quiet &&
-             python producer.py --mode both --rate 200"
+             python producer.py --scenario normal --rate 200"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     networks:
