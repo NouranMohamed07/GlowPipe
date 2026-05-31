@@ -1,0 +1,128 @@
+services:
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: glowpipe_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - glowpipe_network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: glowpipe_kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9101
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - glowpipe_network
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: glowpipe_kafka_init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic user_events --replication-factor 1 --partitions 3
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic product_safety --replication-factor 1 --partitions 3
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic ingredient_alerts --replication-factor 1 --partitions 3
+      echo 'Topics ready'
+      kafka-topics --bootstrap-server kafka:9092 --list
+      "
+    networks:
+      - glowpipe_network
+
+  streaming_postgres:
+    image: postgres:13
+    container_name: glowpipe_streaming_postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: glowpipe_streaming
+    volumes:
+      - streaming_postgres_data:/var/lib/postgresql/data
+      - ../streaming/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d glowpipe_streaming"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - glowpipe_network
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: glowpipe_grafana
+    depends_on:
+      streaming_postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../streaming/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - glowpipe_network
+
+  kafka-producer:
+    image: python:3.11-slim
+    container_name: glowpipe_kafka_producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    working_dir: /app
+    volumes:
+      - ../streaming/kafka:/app
+    command: >
+      sh -c "pip install kafka-python --quiet &&
+             python producer.py --scenario normal --rate 100"
+    networks:
+      - glowpipe_network
+    restart: on-failure
+
+  spark_streaming:
+    image: apache/spark-py:latest
+    container_name: spark_streaming
+    user: root
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+      --host spark_streaming
+      --port 7077
+      --webui-port 8080
+    ports:
+      - "8084:8080"
+    networks:
+      - glowpipe_network
+
+volumes:
+  streaming_postgres_data:
+  grafana_data:
+
+networks:
+  glowpipe_network:
+    driver: bridge
