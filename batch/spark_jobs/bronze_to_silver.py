@@ -1,43 +1,3 @@
-"""
-GlowPipe Bronze → Silver  |  v5
-=================================
-All previous fixes (TC-01 → TC-08, TC-NEW-A → TC-NEW-E) retained.
-
-NEW FIXES IN v5  (discovered on data sample audit):
-----------------------------------------------------
-TC-NEW-G  Price < $1.00 artifacts
-          25 "original" prices in range ($0.01–$0.80) are scraper unit-price
-          conversion bugs.  Floor raised from >0 to >=1.0.
-          Same floor applied to scraper layer (was > 0).
-
-TC-NEW-H  rating = 0.0 for unrated products (77 % of rows)
-          Pipeline was setting rating=0.0 when number_of_reviews==0.
-          0.0 means "rated badly"; an unrated product must be NULL.
-          Fixed: when reviews==0 rating → NULL.
-
-TC-NEW-I  Category over-assigned to 'Skincare' (269 products)
-          product_type_text clearly signals Hair Care (73), Bath & Body (166),
-          Nail Care (22), Fragrance (8) but keyword fallback on product_name
-          missed them.  Added a product_type_text → category correction pass.
-
-TC-NEW-J  sub_category NULL for 85.9 % of products
-          product_type_text is filled for 4,363 of those rows.
-          Added product_type_text → sub_category derivation pass.
-
-TC-NEW-K  ingredients_count NULL for 96.3 % of products
-          Bridge table holds the actual counts; backfill from bridge.
-
-TC-NEW-F  Bridge FK orphans when running on a data SAMPLE
-          INNER JOIN silently dropped valid bridge rows that reference product/
-          ingredient IDs not present in the sample.
-          Fixed: log orphan counts as WARN (not hard FAIL) and note they are
-          expected to be 0 on the full production dataset.
-
-AUDIT CHECK FIX
-          Check for col("currency") raised a AnalysisException because the
-          currency column is dropped earlier in the pipeline.  Guard added.
-"""
-
 import os
 import re as _re
 
@@ -53,7 +13,7 @@ from pyspark.sql.types import FloatType, StringType, IntegerType
 
 spark = (
     SparkSession.builder
-    .appName("GlowPipe-Bronze-To-Silver-FullClean-v4")
+    .appName("GlowPipe-Bronze-To-Silver-v5")
     .master("local[*]")
     .config("spark.driver.memory", "4g")
     .config("spark.executor.memory", "4g")
@@ -259,9 +219,6 @@ KEYWORD_CATS = [
     (r"(?i)(men|beard|aftershave|shaving)", "Men Care"),
 ]
 
-# TC-NEW-I: product_type_text → category override
-# Fixes 269 products that keyword-on-product_name missed
-# (Nail Care 22, Fragrance 8, Hair Care 73, Bath & Body 166)
 PRODUCT_TYPE_TO_CATEGORY = {
     "Shampoo": "Hair Care", "Conditioner": "Hair Care",
     "Other Haircare": "Hair Care", "Hair Mask": "Hair Care",
@@ -291,8 +248,6 @@ PRODUCT_TYPE_TO_CATEGORY = {
     "Men Care": "Men Care", "Aftershave": "Men Care", "Shaving Cream": "Men Care",
 }
 
-# TC-NEW-J: product_type_text → sub_category derivation
-# Fills 85.9 % NULL sub_category using the granular product_type_text signal
 PRODUCT_TYPE_TO_SUBCAT = {
     "Serum": "Treatments & Actives", "Facial Treatment": "Treatments & Actives",
     "Oil": "Treatments & Actives", "Essence": "Treatments & Actives",
@@ -411,7 +366,7 @@ products = products.withColumn("price", col("price").cast(FloatType()))
 products = products.withColumn(
     "price",
     when(col("price").isNull(), lit(None).cast(FloatType()))
-    .when(col("price") < 1.0, lit(None).cast(FloatType()))   # TC-NEW-G: $0.01-$0.99 are scraper unit-price artifacts
+    .when(col("price") < 1.0, lit(None).cast(FloatType()))
     .when(col("price") > 1000, lit(None).cast(FloatType()))
     .otherwise(col("price"))
 )
@@ -489,7 +444,6 @@ if "rating" in products.columns:
 
     products = products.withColumn(
         "rating",
-        # TC-NEW-H: 0 reviews means "unrated", not "rated zero" → NULL
         when(col("number_of_reviews") == 0, lit(None).cast(FloatType()))
         .when(col("rating").isNull() & (col("number_of_reviews") > 0), lit(5.0))
         .when(col("rating").isNull(), lit(None).cast(FloatType()))
@@ -616,9 +570,6 @@ products = products.withColumn(
     ).otherwise(col("category"))
 )
 
-# TC-NEW-I: product_type_text → category correction pass
-# Overrides category ONLY when product_type_text maps to a different valid
-# category that the keyword pass on product_name missed.
 ptt_cat_map = create_map([lit(k) for pair in PRODUCT_TYPE_TO_CATEGORY.items() for k in pair])
 
 products = products.withColumn(
@@ -631,7 +582,6 @@ products = products.withColumn(
     ).otherwise(col("category"))
 )
 
-# TC-NEW-J: derive sub_category from product_type_text where still NULL
 ptt_subcat_map = create_map([lit(k) for pair in PRODUCT_TYPE_TO_SUBCAT.items() for k in pair])
 
 products = products.withColumn(
@@ -752,10 +702,6 @@ bridge_new = bridge_new.withColumn(
 valid_pids = products.select("product_id").dropDuplicates()
 valid_iids = ingredients.select("ingredient_id").dropDuplicates()
 
-# TC-NEW-F: on a data SAMPLE the bridge references product/ingredient IDs that
-# exist in the full dataset but not in this sample.  Count orphans before the
-# INNER JOIN so the drop is visible in logs.  In production (full dataset)
-# both counts must be 0.
 orphan_bridge_pids = bridge_new.join(valid_pids, "product_id", "left_anti").count()
 orphan_bridge_iids = bridge_new.join(valid_iids, "ingredient_id", "left_anti").count()
 audit_info(f"Bridge orphan product_ids   : {orphan_bridge_pids:,}  (expected 0 in production)")
@@ -784,7 +730,6 @@ scraper_clean = (
     scraper
     .filter(col("status") == "valid")
     .withColumn("scraped_price", col("price_usd").cast(FloatType()))
-    # TC-NEW-G: same $1 floor as products table
     .filter(col("scraped_price").isNotNull() & (col("scraped_price") >= 1.0) & (col("scraped_price") <= 1000))
     .select(trim(col("product_id")).alias("s_pid"), col("scraped_price"))
 )
@@ -906,9 +851,6 @@ products = products.withColumn(
 audit_info(f"Price NULL after enrichment: {products.filter(col('price').isNull()).count():,}")
 
 
-# ── TC-NEW-K: Backfill ingredients_count from bridge ─────────────────────
-# 96.3 % of products have NULL ingredients_count, but the bridge table holds
-# the actual ingredient rows.  Count bridge rows per product and backfill.
 log_section("STEP 7 - BACKFILL ingredients_count FROM BRIDGE (TC-NEW-K)")
 
 _null_cnt_before = products.filter(col("ingredients_count").isNull()).count()
@@ -958,7 +900,6 @@ check_zero(bridge_new.join(ingredients.select("ingredient_id"), "ingredient_id",
 check_zero(products.filter(col("price").isNull()).count(), "No null price", "Null price: {}", errors)
 check_zero(products.filter(col("price") < 1.0).count(), "No price < $1.00 (TC-NEW-G)", "Price < $1.00: {}", errors)
 check_zero(products.filter(col("price") > 1000).count(), "No price > 1000", "Price > 1000: {}", errors)
-# currency column is dropped upstream; only check if it still exists
 if "currency" in products.columns:
     check_zero(products.filter(col("currency") != "USD").count(), "All currency values are USD", "Non-USD currency rows: {}", errors)
 
@@ -975,17 +916,14 @@ hardcoded_count = products.filter(col("price_source").like("synthetic_hardcoded%
 if hardcoded_count > 0:
     audit_warn(f"{hardcoded_count:,} products use hardcoded price defaults", warnings)
 
-# TC-NEW-F: bridge orphan counts are WARN not FAIL on partial samples
 if orphan_bridge_pids > 0:
     audit_warn(f"Bridge orphan product_ids: {orphan_bridge_pids:,} (expected 0 in production; OK on sample)", warnings)
 if orphan_bridge_iids > 0:
     audit_warn(f"Bridge orphan ingredient_ids: {orphan_bridge_iids:,} (expected 0 in production; OK on sample)", warnings)
 
-# TC-NEW-H: unrated products must be NULL, not 0.0
 _zero_with_reviews = products.filter((col("rating") == 0.0) & (col("number_of_reviews") > 0)).count()
 check_zero(_zero_with_reviews, "No rating=0 with reviews>0 (TC-NEW-H)", "rating=0 with reviews>0: {}", errors)
 
-# TC-NEW-I/J: category and sub_category quality
 check_zero(
     products.filter(~trim(col("category")).isin(list(VALID_CATS))).count(),
     "All categories are valid (TC-NEW-I)", "Invalid category rows: {}", errors
@@ -996,7 +934,6 @@ if _subcat_null > 0:
 else:
     audit_ok("All products have sub_category (TC-NEW-J)")
 
-# TC-NEW-K: ingredients_count remaining nulls
 _ing_null_remaining = products.filter(col("ingredients_count").isNull()).count()
 if _ing_null_remaining > 0:
     audit_warn(f"{_ing_null_remaining:,} products have no bridge rows – ingredients_count stays NULL", warnings)
@@ -1029,7 +966,7 @@ if len(errors) == 0:
     bridge_new.write.mode("overwrite").parquet(f"{SILVER_NEW}/bridge_new")
 
     print(f"Parquet saved to: {SILVER_NEW}")
-    
+
 
 else:
     print(f"OVERALL FAILED - {len(errors)} error(s)")
