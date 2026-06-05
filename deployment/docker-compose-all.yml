@@ -254,12 +254,12 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-    working_dir: /app
+    working_dir: /app/producers
     volumes:
       - ../streaming/kafka:/app
     command: >
-      sh -c "pip install kafka-python --quiet &&
-             python producer.py --scenario normal --rate 200"
+      sh -c "pip install kafka-python requests --quiet &&
+             python simulator.py --scenario normal --rate 300"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     networks:
