@@ -54,7 +54,7 @@ CREATE TABLE trending_now (
     avg_rating          NUMERIC(3,2),
     avg_price           NUMERIC(10,2),
     trend_score         NUMERIC(10,2),
-    ingested_at         TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
+    ingested_at         TIMESTAMPTZ      NOT NULL DEFAULT NOW()
     
 );
 CREATE INDEX idx_tn_window  ON trending_now (window_start DESC);
@@ -100,7 +100,7 @@ CREATE TABLE allergen_outbreaks (
     avg_compat_score     NUMERIC(5,1),
     avg_allergen_count   NUMERIC(4,1),
     outbreak_severity    VARCHAR(16),     -- medium | high | critical
-    ingested_at          TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
+    ingested_at          TIMESTAMPTZ      NOT NULL DEFAULT NOW()
     
 );
 CREATE INDEX idx_ao_time     ON allergen_outbreaks (window_start DESC);
@@ -125,7 +125,7 @@ CREATE TABLE session_funnel (
     cart_rate        NUMERIC(5,1), -- cart_adds / views × 100
     purchase_rate    NUMERIC(5,1), -- purchases / cart_adds × 100
     abandon_rate     NUMERIC(5,1), -- abandons / cart_adds × 100
-    ingested_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    ingested_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
     
 );
 CREATE INDEX idx_sf_window ON session_funnel (window_start DESC);
@@ -148,7 +148,7 @@ CREATE TABLE price_abandonment (
     avg_abandon_price    NUMERIC(10,2),
     avg_purchase_price   NUMERIC(10,2),
     price_pressure       NUMERIC(5,1),  -- % of events where price > budget
-    ingested_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    ingested_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW()
     
 );
 CREATE INDEX idx_pa_window   ON price_abandonment (window_start DESC);
@@ -167,7 +167,7 @@ CREATE TABLE ingredient_spikes (
     concern_level           VARCHAR(16),  -- low | medium | high
     signal_count            INTEGER       DEFAULT 0,
     total_affected_products INTEGER       DEFAULT 0,
-    ingested_at             TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    ingested_at             TIMESTAMPTZ   NOT NULL DEFAULT NOW()
     
 );
 CREATE INDEX idx_is_window      ON ingredient_spikes (window_start DESC);
