@@ -1,3 +1,9 @@
+## /opt/spark/bin/spark-submit \
+## --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 \
+##/opt/spark/work-dir/batch/spark_jobs/bronze_to_silver.py
+
+
+
 import os
 import re as _re
 
@@ -281,13 +287,6 @@ FLAG_COLS = [
 ]
 
 INT_COLS = [
-    "ingredients_count",
-    "oily_skin_score",
-    "dry_skin_score",
-    "sensitive_skin_score",
-    "combination_skin_score",
-    "normal_skin_score",
-    "acne_prone_score",
     "pregnancy_safe",
     "fungal_acne_safe",
     "comedogenic_rating",
