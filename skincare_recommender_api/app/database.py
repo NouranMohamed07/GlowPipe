@@ -68,8 +68,8 @@ def load_ingredients() -> pd.DataFrame:
     query = """
         SELECT
             INGREDIENT_ID, INGREDIENT_NAME, DESCRIPTION,
-            EVIDENCE_LEVEL, SCIENCE_TAGS, WARNING_TYPE, CALLOUT_TYPE, SOURCE
-        FROM GLOWPIPE_DB.GOLD.DIM_INGREDIENTS
+            EVIDENCE_LEVEL, SCIENCE_TAGS, WARNING_TYPE, CALLOUT_TYPE
+        FROM GLOWPIPE_DB.GOLD.DIM_INGREDIENT
     """
     with get_connection() as conn:
         _ingredients_df = pd.read_sql(query, conn)
@@ -85,10 +85,9 @@ def load_fact() -> pd.DataFrame:
     query = """
         SELECT
             FACT_ID, PRODUCT_ID, INGREDIENT_ID,
-            INGREDIENT_POSITION, IS_TOP5, IS_TOP10,
-            IS_ACTIVE_ZONE, PRODUCT_RATING, PRODUCT_PRICE,
-            SOURCE, CREATED_AT
-        FROM GLOWPIPE_DB.GOLD.FACT_PRODUCT_INGREDIENT_ANALYSIS
+            SOURCE_ID, INGREDIENT_POSITION, IS_TOP5, IS_TOP10,
+            IS_ACTIVE_ZONE, CREATED_AT
+        FROM GLOWPIPE_DB.GOLD.FACT_PRODUCT_INGREDIENT
     """
     with get_connection() as conn:
         _fact_df = pd.read_sql(query, conn)
