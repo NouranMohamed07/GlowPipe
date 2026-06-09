@@ -279,7 +279,7 @@ The recommendation engine is served through a **FastAPI** backend.
 Power BI dashboards provide business intelligence across four themes. All dashboards support filtering by **Category** and **Brand Name**.
 
 <p align="center">
-  <img src="docs/images/powerbi_dashboard.png" width="92%" alt="GlowPipe Power BI Dashboards"/>
+  <img src="docs/images/powerbi_dashboard.JPG" width="92%" alt="GlowPipe Power BI Dashboards"/>
 </p>
 
 ### Product Analytics
