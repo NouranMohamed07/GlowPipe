@@ -58,7 +58,7 @@ GlowPipe is a production-style data engineering platform that brings personalize
 ## Architecture
 
 <p align="center">
-  <img src="docs/images/architecture.png" width="92%" alt="System Architecture"/>
+  <img src="docs/images/architecture.jpg" width="92%" alt="System Architecture"/>
 </p>
 
 GlowPipe operates two parallel pipelines that converge at the analytics and serving layer:
@@ -222,7 +222,7 @@ GlowPipe uses a **star schema** design optimized for analytical queries and BI t
 ## Recommendation System
 
 <p align="center">
-  <img src="docs/images/recommendation_ui.png" width="92%" alt="GlowPipe Recommendation UI"/>
+  <img src="docs/images/recommendation_ui.JPG" width="92%" alt="GlowPipe Recommendation UI"/>
 </p>
 
 The recommendation engine is a **hybrid content-based + rule-based system** that combines skin-profile matching with ingredient intelligence and safety scoring.
